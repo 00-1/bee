@@ -4,8 +4,8 @@
     
     <!-- libraries -->
     <script src="https://unpkg.com/htm@3.0.4" crossorigin></script>
-    <script src="https://unpkg.com/react@17/umd/react.development.js" crossorigin></script>
-    <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react@17/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@17/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-router-dom@5.2.0/umd/react-router-dom.min.js"></script>
     
     <!-- bedrock-viz output. see: https://github.com/bedrock-viz/bedrock-viz -->
@@ -121,9 +121,11 @@
                         </li>`,               
                     Detail: () => html`<div>
                         <h2>
-                            <${Link} to="/">${worldName}</${Link}> >
-                            <${Link} to="/${dimension[id].name}">${dimension[id].name}</${Link}> >
-                            ${' '}${`${Name}`}
+                            <${Link} to="/">${worldName}</${Link}>
+                            ${" > "}
+                            <${Link} to="/${dimension[id].name}">${dimension[id].name}</${Link}>
+                            ${" > "}
+                            ${`${Name}`}
                         </h2>                
                         <ul>
                             ${geojson.features
@@ -147,11 +149,13 @@
                     .map(({ properties: { 
                         Name, 
                         Dimension,
-                        Item: { Name: itemName } = { Name: ''} 
+                        Item: { Name: itemName } = { Name: '-'},
+                        ...props 
                     }}) => ({ 
                         Name, 
                         Dimension,
-                        itemName 
+                        itemName,
+                        ...props
                     }))
                     .filter(({ Name }) => Name === 'Dropped item')
                     .filter(({ Dimension }) => Dimension === id)
@@ -181,6 +185,30 @@
                                     })
                                 </${Link}>
                             </li>
+                        `,
+                        Detail: (groupName) => html`
+                            <h2>
+                                <${Link} to="/">${worldName}</${Link}>
+                                ${" > "}
+                                <${Link} to="/${dimension[id].name}">${dimension[id].name}</${Link}>
+                                ${" > "}
+                                <${Link} to="/${dimension[id].name}/dropped item">Dropped item</${Link}>
+                                ${" > "}
+                                ${`${groupName}`}
+                            </h2>                        
+                            <ul>
+                                ${
+                                    byDimension
+                                        .filter(({itemName}) => itemName === groupName)
+                                        .map(json => html`
+                                            <li>
+                                                <pre>
+                                                    ${JSON.stringify(json, null, " ")}
+                                                </pre>
+                                            </li>
+                                        `)
+                                }
+                            </ul>
                         `
                     }))
             }
@@ -201,6 +229,19 @@
                                     name: typeName, 
                                     Detail: TypeDetail
                                 }) => html`
+                                    ${ // routes for entity groups
+                                        entityGroup[typeName] &&
+                                            entityGroup[typeName](id).map(({
+                                                name: groupName,
+                                                Detail: GroupDetail
+                                            }) => html`
+                                            <${Route} 
+                                                key=${typeName} 
+                                                path=/${dimensionName}/${typeName}/${groupName}
+                                            >   
+                                                ${GroupDetail(groupName)}
+                                            </${Route}>`)
+                                    }
                                     <${Route} 
                                         key=${typeName} 
                                         path=/${dimensionName}/${typeName}
@@ -209,11 +250,13 @@
                                             entityGroup[typeName]
                                                 ? html`<div>
                                                     <h2>
-                                                        <${Link} to="/">${worldName}</${Link}> >
+                                                        <${Link} to="/">${worldName}</${Link}>
+                                                        ${" > "}
                                                         <${Link} to="/${dimension[id].name}">
                                                             ${dimension[id].name}
-                                                        </${Link}> >
-                                                        ${' '}${typeName}
+                                                        </${Link}>
+                                                        ${" > "}
+                                                        ${typeName}
                                                     </h2>
                                                     <ul>
                                                         ${
