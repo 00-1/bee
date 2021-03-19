@@ -1,0 +1,300 @@
+<head>
+    <meta charset="UTF-8">
+    <title>bee</title>
+    
+    <!-- libraries -->
+    <script src="https://unpkg.com/htm@3.0.4" crossorigin></script>
+    <script src="https://unpkg.com/react@17/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@17/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-router-dom@5.2.0/umd/react-router-dom.min.js"></script>
+    
+    <!-- bedrock-viz output. see: https://github.com/bedrock-viz/bedrock-viz -->
+    <script src="../output.geojson"></script>
+    <script src="../output.js"></script>
+
+    <script type="module">
+        const { createElement, useState } = React;
+        const render = ReactDOM.render;
+        const html = htm.bind(createElement);
+        
+        const {
+            HashRouter,
+            Switch,
+            Route,
+            Link,
+            useRouteMatch
+        } = ReactRouterDOM;
+
+        // functions to count entities
+        const count = {
+            world: geojson.features.length,
+            dimension: id => geojson.features.filter(
+                ({properties: {Dimension}}) => Dimension === id
+            ).length
+        }
+
+        // world component
+        const World = () => html`
+            <h2>${worldName}</h2>
+            <ul>
+                ${Object.entries({
+                    worldName, 
+                    worldSeed, 
+                    creationTime, 
+                    creationBedrockVizVersion,
+                    loadGeoJSONFlag,
+                    fnGeoJSON,
+                    useTilesFlag,
+                    tileW,
+                    tileH,
+                    entities: count.world
+                }).map(([key, value]) => html`
+                    <li key=${key}>
+                        <b>${key}</b> ${JSON.stringify(value)}
+                    </li>
+                `)}
+            </ul>
+            <ul>
+                ${dimension.map(({id, name, Tile}) =>  html`<${Tile} />`)}                                    
+            </ul>
+        `
+
+        // dimension components
+        const dimension = [
+            { id: "0", name: "overworld" },
+            { id: "1", name: "nether" },
+            { id: "2", name: "end" }
+        ].map(({id, name}) => ({ 
+            id,
+            name,
+            Tile: () => html`
+                <li key=${id}>
+                    <${Link} to=/${name}>
+                        ${name} (${count.dimension(id)})
+                    </${Link}>
+                </li>`,
+            Detail: () => html`<div>
+                <h2>
+                    <${Link} to="/">${worldName}</${Link}> >
+                    ${' '}${`${name}`}
+                </h2>                
+                <ul>
+                    ${Object.entries({
+                        ...dimensionInfo[id],
+                        entities: count.dimension(id)
+                    }).map(([key, value]) => 
+                        // only interested in the numbers
+                        typeof value === 'number' 
+                            && html`<li key=${key}>
+                                <b>${key}</b> ${value}
+                            </li>`
+                    )}
+                </ul>
+                <ul>
+                    ${entityType(id).map(({Tile}) => html`<${Tile} />`)}
+                </ul>
+            </div>`
+        }))
+
+        // entity type components
+        const entityType = id => {
+         
+            // only show entities for the given dimension id
+            const byDimension = geojson.features
+                .map(({properties: { Name, Dimension }}) => ({ Name, Dimension }))
+                .filter(({ Dimension }) => Dimension === id)
+            
+            // return a component for each type
+            return byDimension 
+                .map(({Name}) => Name)
+                // filter unique Names
+                .filter((Name, index, self) => self.indexOf(Name) === index)
+                .map(Name => ({
+                    name: Name,
+                    Tile: () => html`
+                        <li key=${Name}>
+                            <${Link} to=/${dimension[id].name}/${Name.toLowerCase()}>
+                                ${Name} (${byDimension
+                                    .filter(({Name: N}) => Name === N)
+                                    .length})
+                            </${Link}>
+                        </li>`,               
+                    Detail: () => html`<div>
+                        <h2>
+                            <${Link} to="/">${worldName}</${Link}>
+                            ${" > "}
+                            <${Link} to="/${dimension[id].name}">${dimension[id].name}</${Link}>
+                            ${" > "}
+                            ${`${Name}`}
+                        </h2>                
+                        <ul>
+                            ${geojson.features
+                                .filter(({properties: {Name: N}}) => N === Name)
+                                .map(json => html`
+                                    <li key=${json.UniqueID}>
+                                        <pre>${JSON.stringify(json, 2, " ")}</pre>
+                                    </li>
+                                `)
+                            }
+                        </ul>
+                    </div>` 
+            }))
+        }
+        
+        // used to create groups within an entity type
+        const entityGroup = {
+            'Dropped item': id => {
+                // only show entities for the given dimension id
+                const byDimension = geojson.features
+                    .map(({ properties: { 
+                        Name, 
+                        Dimension,
+                        Item: { Name: itemName } = { Name: '-'},
+                        ...props 
+                    }}) => ({ 
+                        Name, 
+                        Dimension,
+                        itemName,
+                        ...props
+                    }))
+                    .filter(({ Name }) => Name === 'Dropped item')
+                    .filter(({ Dimension }) => Dimension === id)
+
+                return byDimension 
+                    .map(({itemName}) => itemName)
+                    // filter unique Names
+                    .filter((Name, index, self) => 
+                        self.indexOf(Name) === index)
+                    .map(Name => ({
+                        name: Name,
+                        Tile: () => html`
+                            <li key=${Name}>
+                                <${Link} to="/${
+                                    dimension[id].name
+                                }/dropped item/${
+                                    Name.toLowerCase()
+                                }">
+                                    ${
+                                        Name
+                                    } (${
+                                        byDimension
+                                            .filter(
+                                                ({itemName}) => 
+                                                Name === itemName
+                                            ).length
+                                    })
+                                </${Link}>
+                            </li>
+                        `,
+                        Detail: (groupName) => html`
+                            <h2>
+                                <${Link} to="/">${worldName}</${Link}>
+                                ${" > "}
+                                <${Link} to="/${dimension[id].name}">${dimension[id].name}</${Link}>
+                                ${" > "}
+                                <${Link} to="/${dimension[id].name}/dropped item">Dropped item</${Link}>
+                                ${" > "}
+                                ${`${groupName}`}
+                            </h2>                        
+                            <ul>
+                                ${
+                                    byDimension
+                                        .filter(({itemName}) => itemName === groupName)
+                                        .map(json => html`
+                                            <li>
+                                                <pre>
+                                                    ${JSON.stringify(json, null, " ")}
+                                                </pre>
+                                            </li>
+                                        `)
+                                }
+                            </ul>
+                        `
+                    }))
+            }
+        }
+
+        // routing
+        const Routes = html`
+            <${HashRouter}>  
+                <${Switch}> 
+                    ${ // routes for each dimension
+                        dimension.map(({
+                            id, 
+                            name: dimensionName, 
+                            Detail: DimensionDetail
+                        }) => html`
+                            ${ // routes for each entity type
+                                entityType(id).map(({
+                                    name: typeName, 
+                                    Detail: TypeDetail
+                                }) => html`
+                                    ${ // routes for entity groups
+                                        entityGroup[typeName] &&
+                                            entityGroup[typeName](id).map(({
+                                                name: groupName,
+                                                Detail: GroupDetail
+                                            }) => html`
+                                            <${Route} 
+                                                key=${typeName} 
+                                                path=/${dimensionName}/${typeName}/${groupName}
+                                            >   
+                                                ${GroupDetail(groupName)}
+                                            </${Route}>`)
+                                    }
+                                    <${Route} 
+                                        key=${typeName} 
+                                        path=/${dimensionName}/${typeName}
+                                    >
+                                        ${ // use entity group if it exists
+                                            entityGroup[typeName]
+                                                ? html`<div>
+                                                    <h2>
+                                                        <${Link} to="/">${worldName}</${Link}>
+                                                        ${" > "}
+                                                        <${Link} to="/${dimension[id].name}">
+                                                            ${dimension[id].name}
+                                                        </${Link}>
+                                                        ${" > "}
+                                                        ${typeName}
+                                                    </h2>
+                                                    <ul>
+                                                        ${
+                                                            entityGroup[typeName](id)
+                                                                .map(({Tile}) => html`<${Tile} />`)
+                                                        }
+                                                    </ul>
+                                                </div>`
+                                                : html`<${TypeDetail} />`
+                                        }
+                                    </${Route}>
+                                `)
+                            }
+                            <${Route} 
+                                key=${id} 
+                                path=/${dimensionName}
+                            >
+                                <${DimensionDetail} />
+                            </${Route}>
+                        `)
+                    } 
+                    <${Route} 
+                        path="/"
+                    >
+                        <${World} />
+                    </${Route}>                        
+                </${Switch}>
+            </${HashRouter}>`
+
+        
+        render(
+            Routes, 
+            document.getElementById("root")
+        );
+    </script>
+ </head>
+ 
+ <body>
+    <h1>bee</h1>
+    <div id="root" />
+ </body>
